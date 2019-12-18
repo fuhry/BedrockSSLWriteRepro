@@ -22,13 +22,11 @@ def worker():
 
     for i in range(0, ITERATIONS_PER_WORKER):
         msg = random_message()
-        nw = 0
-        while nw < len(msg):
-            nw += ssock.send(msg[nw:])
+        ssock.send(msg)
 
-        buf = b''
-        while len(buf) < len(msg):
-            buf += ssock.read(len(msg) - len(buf))
+        # Read our message back. Never send more than one message at a time per
+        # connection.
+        buf = ssock.read(len(msg))
 
         if buf == msg:
             print("Server successfully echoed %d byte message" % (len(msg)))
