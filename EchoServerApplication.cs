@@ -45,6 +45,9 @@ namespace Bedrock.Framework
                         };
 
                         await _pool.Enqueue(item);
+
+                        // This does not produce the issue.
+                        // await HandleMessage(item);
                     }
 
                     connection.Transport.Input.AdvanceTo(buffer.End);
