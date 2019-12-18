@@ -18,7 +18,7 @@ namespace Bedrock.Framework
         public EchoServerApplication(ILogger<EchoServerApplication> logger)
         {
             _logger = logger;
-            _pool = WorkerPool<WorkItem>.Instance(async (item) => await HandleMessage(item), _logger);
+            _pool = WorkerPool<WorkItem>.Instance(HandleMessage, _logger);
         }
 
         public override async Task OnConnectedAsync(ConnectionContext connection)
@@ -71,7 +71,7 @@ namespace Bedrock.Framework
             }
         }
 
-        private async Task HandleMessage(WorkItem item) =>
+        private async void HandleMessage(WorkItem item) =>
             await HandleMessage(item.Connection, item.Message);
     }
 
