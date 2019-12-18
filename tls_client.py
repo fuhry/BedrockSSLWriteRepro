@@ -7,8 +7,8 @@ from multiprocessing import Process
 
 HOST = '127.0.0.1'
 PORT = 5004
-WORKERS = 200
-ITERATIONS_PER_WORKER = 200
+WORKERS = 500
+ITERATIONS_PER_WORKER = 1000
 SOCKET_TIMEOUT = 5
 
 def worker():

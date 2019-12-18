@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using Bedrock.Framework.Middleware.Tls;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Logging;
 
@@ -23,13 +22,62 @@ namespace Bedrock.Framework
 
         public override async Task OnConnectedAsync(ConnectionContext connection)
         {
+            using var handler = new EchoConnectionHandler(connection, _pool, _logger);
+            await handler.Handle();
+        }
+
+        private async Task HandleMessage(EchoConnectionHandler connection, byte[] msg)
+        {
+            await connection.WriteAsync(msg);
+        }
+
+        private async void HandleMessage(WorkItem item) =>
+            await HandleMessage(item.Connection, item.Message);
+    }
+
+    internal class EchoConnectionHandler : IDisposable
+    {
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1);
+        private readonly ConnectionContext _connection;
+        private readonly ILogger<EchoServerApplication> _logger;
+        private readonly WorkerPool<WorkItem> _pool;
+        private bool _disposed = false;
+        private bool _disposing = false;
+
+        public EchoConnectionHandler(ConnectionContext connection, WorkerPool<WorkItem> pool, ILogger<EchoServerApplication> logger)
+        {
+            _connection = connection;
+            _pool = pool;
+            _logger = logger;
+        }
+
+        ~EchoConnectionHandler()
+        {
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed && !_disposing)
+            {
+                _disposing = true;
+
+                _semaphore.Dispose();
+
+                _disposed = true;
+                _disposing = false;
+            }
+        }
+
+        public async Task Handle()
+        {
             try
             {
-                _logger.LogInformation("{ConnectionId} connected", connection.ConnectionId);
+                _logger.LogInformation("{ConnectionId} connected", _connection.ConnectionId);
 
                 while (true)
                 {
-                    var result = await connection.Transport.Input.ReadAsync();
+                    var result = await _connection.Transport.Input.ReadAsync();
                     if (result.IsCompleted)
                     {
                         break;
@@ -40,7 +88,7 @@ namespace Bedrock.Framework
                     {
                         var item = new WorkItem()
                         {
-                            Connection = connection,
+                            Connection = this,
                             Message = msg.ToArray()
                         };
 
@@ -50,33 +98,31 @@ namespace Bedrock.Framework
                         // await HandleMessage(item);
                     }
 
-                    connection.Transport.Input.AdvanceTo(buffer.End);
+                    _connection.Transport.Input.AdvanceTo(buffer.End);
                 }
             }
             finally
             {
-                _logger.LogInformation("{ConnectionId} disconnected", connection.ConnectionId);
+                _logger.LogInformation("{ConnectionId} disconnected", _connection.ConnectionId);
             }
         }
 
-        private async Task HandleMessage(ConnectionContext connection, byte[] msg)
+        public async Task WriteAsync(byte[] msg)
         {
+            await _semaphore.WaitAsync();
             try
             {
-                lock (connection.Transport.Output)
-                {
-                    connection.Transport.Output.WriteAsync(msg).AsTask().Wait();
-                }
+                await _connection.Transport.Output.WriteAsync(msg);
             }
             catch (NotSupportedException e)
             {
                 _logger.LogError(e, "NotSupportedException");
             }
-            await connection.Transport.Output.FlushAsync();
+            finally
+            {
+                _semaphore.Release();
+            }
         }
-
-        private async void HandleMessage(WorkItem item) =>
-            await HandleMessage(item.Connection, item.Message);
     }
 
     internal class WorkerPool<T>
@@ -142,7 +188,7 @@ namespace Bedrock.Framework
 
     internal class WorkItem
     {
-        public ConnectionContext Connection;
+        public EchoConnectionHandler Connection;
         public byte[] Message;
     }
 }
