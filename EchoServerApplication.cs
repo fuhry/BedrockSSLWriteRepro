@@ -61,14 +61,21 @@ namespace Bedrock.Framework
 
         private async Task HandleMessage(ConnectionContext connection, byte[] msg)
         {
-            try
+            int delay = 1;
+            while (true)
             {
-                await connection.Transport.Output.WriteAsync(msg);
+                try
+                {
+                    await connection.Transport.Output.WriteAsync(msg);
+                    break;
+                }
+                catch (NotSupportedException e)
+                {
+                    _logger.LogError(e, "NotSupportedException");
+                    await Task.Delay(delay*=2);
+                }
             }
-            catch (NotSupportedException e)
-            {
-                _logger.LogError(e, "NotSupportedException");
-            }
+            await connection.Transport.Output.FlushAsync();
         }
 
         private async void HandleMessage(WorkItem item) =>

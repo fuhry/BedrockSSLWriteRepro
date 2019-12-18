@@ -34,6 +34,9 @@ namespace ServerApplication
                                     options.RemoteCertificateMode = RemoteCertificateMode.NoCertificate;
                                 })
                                 .UseConnectionHandler<EchoServerApplication>());
+
+                            sockets.Listen(IPAddress.Loopback, 5005,
+                                builder => builder.UseConnectionHandler<EchoServerApplication>());
                         })
                         .Build();
 
